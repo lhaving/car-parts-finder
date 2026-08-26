@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Parts Finder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .results {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .results h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .shop-card {
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+
+        .shop-card h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .shop-card p {
+            color: #666;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .parts-list {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid #eee;
+        }
+
+        .parts-list li {
+            color: #555;
+            margin-left: 20px;
+            font-size: 14px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #c33;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .info {
+            background: #eef1ff;
+            color: #445;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .info.show {
+            display: block;
+        }
+
+        .secondary-btn {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .secondary-btn:hover {
+            background: #f0f0ff;
+        }
+
+        button:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .disclaimer {
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Car Parts Finder</h1>
+        <p class="subtitle">Find real auto parts & repair shops near you</p>
+
+        <div class="error" id="error"></div>
+        <div class="info" id="info"></div>
+
+        <form id="searchForm">
+            <div class="form-group">
+                <label for="carModel">Car Model</label>
+                <input
+                    type="text"
+                    id="carModel"
+                    placeholder="e.g., Honda Civic, Toyota Camry"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="location">Your Location</label>
+                <input
+                    type="text"
+                    id="location"
+                    placeholder="e.g., Seattle, WA or 98101"
+                >
+                <button type="button" id="useLocationBtn" class="secondary-btn">📍 Use My Current Location</button>
+            </div>
+
+            <button type="submit" id="searchBtn">Search for Parts</button>
+        </form>
+
+        <div class="results" id="results">
+            <h2>Nearby Auto Shops</h2>
+            <p class="disclaimer">Shop names, addresses, and distances are pulled live from OpenStreetMap. Parts lists are general estimates, not live inventory.</p>
+            <div id="shopsList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Get the form and results elements
+        const form = document.getElementById('searchForm');
+        const resultsDiv = document.getElementById('results');
+        const shopsList = document.getElementById('shopsList');
+        const errorDiv = document.getElementById('error');
+        const infoDiv = document.getElementById('info');
+        const searchBtn = document.getElementById('searchBtn');
+        const useLocationBtn = document.getElementById('useLocationBtn');
+        const locationInput = document.getElementById('location');
+
+        function showError(msg) {
+            errorDiv.textContent = msg;
+            errorDiv.classList.add('show');
+            infoDiv.classList.remove('show');
+        }
+
+        function showInfo(msg) {
+            infoDiv.textContent = msg;
+            infoDiv.classList.add('show');
+            errorDiv.classList.remove('show');
+        }
+
+        function clearMessages() {
+            errorDiv.classList.remove('show');
+            infoDiv.classList.remove('show');
+        }
+
+        // Cache results per location for an hour so repeated searches don't re-hit the free APIs
+        const CACHE_PREFIX = 'carPartsFinder_cache_';
+        const CACHE_TTL_MS = 60 * 60 * 1000;
+
+        function getCache(locationKey) {
+            try {
+                const raw = localStorage.getItem(CACHE_PREFIX + locationKey.toLowerCase());
+                if (!raw) return null;
+                const cached = JSON.parse(raw);
+                if (Date.now() - cached.timestamp > CACHE_TTL_MS) return null;
+                return cached;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setCache(locationKey, lat, lon, shops) {
+            try {
+                localStorage.setItem(CACHE_PREFIX + locationKey.toLowerCase(), JSON.stringify({
+                    timestamp: Date.now(),
+                    lat, lon, shops
+                }));
+            } catch (e) {
+                // localStorage unavailable or full - caching is a nice-to-have, fail silently
+            }
+        }
+
+        // Distance between two points on Earth, in miles
+        function haversineMiles(lat1, lon1, lat2, lon2) {
+            const R = 3958.8;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Turn a typed location like "Seattle, WA" into real coordinates (free, no API key)
+        async function geocodeLocation(text) {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(text)}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('geocoding service unavailable');
+            const data = await response.json();
+            if (data.length === 0) throw new Error('location not found');
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        }
+
+        // Turn GPS coordinates back into a readable place name
+        async function reverseGeocode(lat, lon) {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('reverse geocoding failed');
+            const data = await response.json();
+            return data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+        }
+
+        // Ask OpenStreetMap's live database for real auto parts/repair shops near a point
+        async function findNearbyShops(lat, lon, radiusMeters = 15000) {
+            const query = `
+                [out:json][timeout:25];
+                (
+                  node["shop"="car_parts"](around:${radiusMeters},${lat},${lon});
+                  way["shop"="car_parts"](around:${radiusMeters},${lat},${lon});
+                  node["shop"="car_repair"](around:${radiusMeters},${lat},${lon});
+                  way["shop"="car_repair"](around:${radiusMeters},${lat},${lon});
+                );
+                out center tags;
+            `;
+            const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('shop lookup service unavailable');
+            const data = await response.json();
+
+            return data.elements
+                .map(el => {
+                    const elLat = el.lat || el.center?.lat;
+                    const elLon = el.lon || el.center?.lon;
+                    const tags = el.tags || {};
+                    const addressParts = [tags['addr:housenumber'], tags['addr:street'], tags['addr:city']].filter(Boolean);
+                    return {
+                        name: tags.name || 'Unnamed Shop',
+                        type: tags.shop === 'car_parts' ? 'Parts Store' : 'Repair Shop',
+                        address: addressParts.length ? addressParts.join(' ') : 'Address not listed',
+                        phone: tags.phone || tags['contact:phone'] || null,
+                        website: tags.website || tags['contact:website'] || null,
+                        lat: elLat,
+                        lon: elLon,
+                        distance: (elLat && elLon) ? haversineMiles(lat, lon, elLat, elLon) : null
+                    };
+                })
+                .filter(shop => shop.distance !== null)
+                .sort((a, b) => a.distance - b.distance)
+                .slice(0, 10);
+        }
+
+        // No public API exposes real-time inventory for auto parts retailers, so this
+        // gives a category-based estimate instead of pretending to know real stock.
+        function guessCommonParts(carModel) {
+            const model = carModel.toLowerCase();
+            if (/tesla|\bev\b|electric|leaf|bolt/.test(model)) {
+                return ['12V Auxiliary Battery', 'Cabin Air Filter', 'Wiper Blades', 'Brake Pads', 'Tire Rotation'];
+            }
+            if (/f-150|silverado|ram|truck|tundra|sierra/.test(model)) {
+                return ['Engine Oil & Filter', 'Transmission Fluid', 'Brake Pads & Rotors', 'Shocks & Struts', 'Battery'];
+            }
+            return ['Engine Oil & Filter', 'Air Filter', 'Brake Pads', 'Spark Plugs', 'Battery', 'Wiper Blades'];
+        }
+
+        function renderResults(shops, carModel) {
+            shopsList.innerHTML = '';
+            const partsHTML = guessCommonParts(carModel).map(p => `<li>${p}</li>`).join('');
+
+            shops.forEach(shop => {
+                const shopCard = document.createElement('div');
+                shopCard.className = 'shop-card';
+
+                const mapLink = `https://www.openstreetmap.org/?mlat=${shop.lat}&mlon=${shop.lon}#map=17/${shop.lat}/${shop.lon}`;
+                const phoneHTML = shop.phone ? `<p><strong>Phone:</strong> ${shop.phone}</p>` : '';
+                const websiteHTML = shop.website ? `<p><strong>Website:</strong> <a href="${shop.website}" target="_blank" rel="noopener">${shop.website}</a></p>` : '';
+
+                shopCard.innerHTML = `
+                    <h3>${shop.name}</h3>
+                    <p><strong>Type:</strong> ${shop.type}</p>
+                    <p><strong>Distance:</strong> ${shop.distance.toFixed(1)} miles away</p>
+                    <p><strong>Address:</strong> ${shop.address}</p>
+                    ${phoneHTML}
+                    ${websiteHTML}
+                    <p><a href="${mapLink}" target="_blank" rel="noopener">View on map</a></p>
+                    <div class="parts-list">
+                        <strong>Commonly needed parts for this vehicle (estimate, not live stock):</strong>
+                        <ul>${partsHTML}</ul>
+                    </div>
+                `;
+
+                shopsList.appendChild(shopCard);
+            });
+
+            const note = document.createElement('p');
+            note.className = 'disclaimer';
+            note.innerHTML = `Want to check real stock for your exact ${carModel}? <a href="https://www.google.com/search?q=${encodeURIComponent(carModel + ' parts near me')}" target="_blank" rel="noopener">Search online</a>.`;
+            shopsList.appendChild(note);
+
+            resultsDiv.classList.add('show');
+        }
+
+        async function runSearch(lat, lon, carModel, cacheKey) {
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Searching...';
+            clearMessages();
+            resultsDiv.classList.remove('show');
+
+            try {
+                const cached = getCache(cacheKey);
+                const shops = cached ? cached.shops : await findNearbyShops(lat, lon);
+                if (!cached) setCache(cacheKey, lat, lon, shops);
+
+                if (shops.length === 0) {
+                    showInfo('No auto parts or repair shops found within 15 miles on OpenStreetMap. Try a different location.');
+                } else {
+                    renderResults(shops, carModel);
+                    if (cached) showInfo('Loaded from cache (searched within the last hour) — no new API calls made.');
+                }
+            } catch (err) {
+                showError('Something went wrong looking up shops: ' + err.message);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search for Parts';
+            }
+        }
+
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const carModel = document.getElementById('carModel').value.trim();
+            const locationText = locationInput.value.trim();
+
+            if (!carModel || !locationText) {
+                showError('Please enter both a car model and a location.');
+                return;
+            }
+
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Locating...';
+            clearMessages();
+
+            const cacheKey = locationText.toLowerCase();
+
+            try {
+                const cached = getCache(cacheKey);
+                const geo = cached ? { lat: cached.lat, lon: cached.lon } : await geocodeLocation(locationText);
+                await runSearch(geo.lat, geo.lon, carModel, cacheKey);
+            } catch (err) {
+                showError('Could not find that location: ' + err.message);
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search for Parts';
+            }
+        });
+
+        useLocationBtn.addEventListener('click', function() {
+            const carModel = document.getElementById('carModel').value.trim();
+            if (!carModel) {
+                showError('Please enter a car model first.');
+                return;
+            }
+            if (!navigator.geolocation) {
+                showError('Your browser does not support location detection. Please type a location instead.');
+                return;
+            }
+
+            useLocationBtn.disabled = true;
+            useLocationBtn.textContent = 'Detecting location...';
+            clearMessages();
+
+            navigator.geolocation.getCurrentPosition(
+                async function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+                    try {
+                        locationInput.value = await reverseGeocode(lat, lon);
+                    } catch (e) {
+                        locationInput.value = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                    }
+                    useLocationBtn.disabled = false;
+                    useLocationBtn.textContent = '📍 Use My Current Location';
+                    await runSearch(lat, lon, carModel, cacheKey);
+                },
+                function(error) {
+                    useLocationBtn.disabled = false;
+                    useLocationBtn.textContent = '📍 Use My Current Location';
+                    showError('Could not get your location: ' + error.message + '. Try typing a location instead.');
+                }
+            );
+        });
+    </script>
+</body>
+</html>
