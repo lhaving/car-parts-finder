@@ -376,8 +376,9 @@
             infoDiv.classList.remove('show');
         }
 
-        // Cache results per location for an hour so repeated searches don't re-hit the free APIs
-        const CACHE_PREFIX = 'carPartsFinder_cache_';
+        // Cache results per location for an hour so repeated searches don't re-hit the free APIs.
+        // Versioned so a future change to the cached shop shape can't collide with old entries.
+        const CACHE_PREFIX = 'carPartsFinder_cache_v2_';
         const CACHE_TTL_MS = 60 * 60 * 1000;
 
         function getCache(locationKey) {
