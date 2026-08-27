@@ -194,6 +194,99 @@
             font-style: italic;
             margin-bottom: 15px;
         }
+
+        .shop-card {
+            animation: fadeIn 0.35s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .part-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            flex-wrap: wrap;
+        }
+
+        .part-row:last-child {
+            border-bottom: none;
+        }
+
+        .part-name {
+            font-size: 14px;
+            color: #444;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .part-status {
+            font-size: 12px;
+            color: #888;
+            white-space: nowrap;
+        }
+
+        .part-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .report-btn {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transform: none;
+            transition: background 0.15s;
+        }
+
+        .report-btn.in-stock {
+            background: #e6f7ec;
+            color: #1a7f3c;
+            border: 1px solid #b5e5c6;
+        }
+
+        .report-btn.in-stock:hover {
+            background: #d3f0dd;
+        }
+
+        .report-btn.out-stock {
+            background: #fdecec;
+            color: #b3261e;
+            border: 1px solid #f3c6c4;
+        }
+
+        .report-btn.out-stock:hover {
+            background: #fbdedd;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #ddd;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .toast {
+            font-size: 12px;
+            color: #1a7f3c;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -235,7 +328,27 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
     <script>
+        // Replace with your own project's config from the Firebase console.
+        // Firebase web config values are meant to be public - real security comes from Firestore rules, not from hiding this.
+        const firebaseConfig = {
+            apiKey: "AIzaSyAklUhrYxZqVXTfHxVGb_mqenyO45MRIuE",
+            authDomain: "car-parts-finder-6572d.firebaseapp.com",
+            projectId: "car-parts-finder-6572d",
+            storageBucket: "car-parts-finder-6572d.firebasestorage.app",
+            messagingSenderId: "994899890999",
+            appId: "1:994899890999:web:d0ceeafa2d810ab99cc0b2"
+        };
+
+        const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
+        let db = null;
+        if (isFirebaseConfigured) {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        }
+
         // Get the form and results elements
         const form = document.getElementById('searchForm');
         const resultsDiv = document.getElementById('results');
@@ -345,8 +458,9 @@
                     const tags = el.tags || {};
                     const addressParts = [tags['addr:housenumber'], tags['addr:street'], tags['addr:city']].filter(Boolean);
                     return {
+                        osmId: `${el.type}/${el.id}`,
                         name: tags.name || 'Unnamed Shop',
-                        type: tags.shop === 'car_parts' ? 'Parts Store' : 'Repair Shop',
+                        category: tags.shop === 'car_parts' ? 'Parts Store' : 'Repair Shop',
                         address: addressParts.length ? addressParts.join(' ') : 'Address not listed',
                         phone: tags.phone || tags['contact:phone'] || null,
                         website: tags.website || tags['contact:website'] || null,
@@ -373,38 +487,158 @@
             return ['Engine Oil & Filter', 'Air Filter', 'Brake Pads', 'Spark Plugs', 'Battery', 'Wiper Blades'];
         }
 
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
+        function formatRelativeTime(ms) {
+            const mins = Math.floor((Date.now() - ms) / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return `${mins}m ago`;
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return `${hours}h ago`;
+            return `${Math.floor(hours / 24)}d ago`;
+        }
+
+        function formatStatusText(data) {
+            if (!data) return 'No community reports yet';
+            const lastLabel = data.lastStatus === 'in_stock' ? 'in stock' : 'out of stock';
+            return `${data.inStock} in-stock / ${data.outStock} out reports · last: ${lastLabel} (${formatRelativeTime(data.lastTime)})`;
+        }
+
+        // Firestore reads/writes for crowdsourced stock reports
+        async function loadShopReports(shopId) {
+            const snapshot = await db.collection('stockReports').where('shopId', '==', shopId).get();
+            const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            const map = {};
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                const ts = d.timestamp?.toMillis ? d.timestamp.toMillis() : 0;
+                if (ts < cutoffMs) return;
+                const key = (d.part || '').toLowerCase();
+                if (!map[key]) map[key] = { inStock: 0, outStock: 0, lastStatus: null, lastTime: 0 };
+                if (d.status === 'in_stock') map[key].inStock++; else map[key].outStock++;
+                if (ts > map[key].lastTime) { map[key].lastTime = ts; map[key].lastStatus = d.status; }
+            });
+            return map;
+        }
+
+        async function submitReport(shopId, shopName, part, status) {
+            await db.collection('stockReports').add({
+                shopId, shopName, part, status,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        // Simple per-browser throttle so one visitor can't spam the same report repeatedly
+        const REPORT_COOLDOWN_MS = 10 * 60 * 1000;
+
+        function cooldownKey(shopId, part) {
+            return `carPartsFinder_reported_${shopId}_${part.toLowerCase()}`;
+        }
+
+        function isOnCooldown(shopId, part) {
+            const raw = localStorage.getItem(cooldownKey(shopId, part));
+            return raw ? (Date.now() - parseInt(raw, 10) < REPORT_COOLDOWN_MS) : false;
+        }
+
+        function setCooldown(shopId, part) {
+            try { localStorage.setItem(cooldownKey(shopId, part), String(Date.now())); } catch (e) {}
+        }
+
+        function wireUpReportButtons(shopCard, shop, commonParts) {
+            loadShopReports(shop.osmId).then(map => {
+                commonParts.forEach(part => {
+                    const statusEl = shopCard.querySelector(`[data-part="${CSS.escape(part)}"] .part-status`);
+                    if (statusEl) statusEl.textContent = formatStatusText(map[part.toLowerCase()]);
+                });
+            }).catch(() => {
+                shopCard.querySelectorAll('.part-status').forEach(el => el.textContent = 'Reports unavailable right now');
+            });
+
+            shopCard.querySelectorAll('.part-row').forEach(row => {
+                const part = row.dataset.part;
+                const statusEl = row.querySelector('.part-status');
+                const buttons = row.querySelectorAll('.report-btn');
+
+                if (isOnCooldown(shop.osmId, part)) {
+                    buttons.forEach(b => b.disabled = true);
+                }
+
+                buttons.forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        buttons.forEach(b => b.disabled = true);
+                        try {
+                            await submitReport(shop.osmId, shop.name, part, btn.dataset.status);
+                            setCooldown(shop.osmId, part);
+                            statusEl.innerHTML = '<span class="toast">Thanks for reporting!</span>';
+                            const map = await loadShopReports(shop.osmId);
+                            setTimeout(() => { statusEl.textContent = formatStatusText(map[part.toLowerCase()]); }, 1500);
+                        } catch (err) {
+                            statusEl.textContent = 'Could not submit report';
+                            buttons.forEach(b => b.disabled = false);
+                        }
+                    });
+                });
+            });
+        }
+
         function renderResults(shops, carModel) {
             shopsList.innerHTML = '';
-            const partsHTML = guessCommonParts(carModel).map(p => `<li>${p}</li>`).join('');
+            const commonParts = guessCommonParts(carModel);
 
             shops.forEach(shop => {
                 const shopCard = document.createElement('div');
                 shopCard.className = 'shop-card';
 
                 const mapLink = `https://www.openstreetmap.org/?mlat=${shop.lat}&mlon=${shop.lon}#map=17/${shop.lat}/${shop.lon}`;
-                const phoneHTML = shop.phone ? `<p><strong>Phone:</strong> ${shop.phone}</p>` : '';
-                const websiteHTML = shop.website ? `<p><strong>Website:</strong> <a href="${shop.website}" target="_blank" rel="noopener">${shop.website}</a></p>` : '';
+                const phoneHTML = shop.phone ? `<p><strong>Phone:</strong> ${escapeHtml(shop.phone)}</p>` : '';
+                const safeWebsite = shop.website && /^https?:\/\//i.test(shop.website) ? shop.website : null;
+                const websiteHTML = safeWebsite ? `<p><strong>Website:</strong> <a href="${safeWebsite}" target="_blank" rel="noopener">${escapeHtml(safeWebsite)}</a></p>` : '';
+
+                let partsListHTML;
+                if (isFirebaseConfigured) {
+                    partsListHTML = commonParts.map(part => `
+                        <div class="part-row" data-part="${escapeHtml(part)}">
+                            <span class="part-name">${escapeHtml(part)}</span>
+                            <span class="part-status"><span class="spinner"></span></span>
+                            <span class="part-actions">
+                                <button type="button" class="report-btn in-stock" data-status="in_stock">✅ In Stock</button>
+                                <button type="button" class="report-btn out-stock" data-status="out_of_stock">❌ Out</button>
+                            </span>
+                        </div>
+                    `).join('');
+                } else {
+                    partsListHTML = `<ul>${commonParts.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`;
+                }
 
                 shopCard.innerHTML = `
-                    <h3>${shop.name}</h3>
-                    <p><strong>Type:</strong> ${shop.type}</p>
+                    <h3>${escapeHtml(shop.name)}</h3>
+                    <p><strong>Type:</strong> ${shop.category}</p>
                     <p><strong>Distance:</strong> ${shop.distance.toFixed(1)} miles away</p>
-                    <p><strong>Address:</strong> ${shop.address}</p>
+                    <p><strong>Address:</strong> ${escapeHtml(shop.address)}</p>
                     ${phoneHTML}
                     ${websiteHTML}
                     <p><a href="${mapLink}" target="_blank" rel="noopener">View on map</a></p>
                     <div class="parts-list">
-                        <strong>Commonly needed parts for this vehicle (estimate, not live stock):</strong>
-                        <ul>${partsHTML}</ul>
+                        <strong>${isFirebaseConfigured ? 'Community-reported stock (tap to add your own report):' : 'Commonly needed parts for this vehicle (estimate, not live stock):'}</strong>
+                        ${partsListHTML}
                     </div>
                 `;
 
                 shopsList.appendChild(shopCard);
+
+                if (isFirebaseConfigured) {
+                    wireUpReportButtons(shopCard, shop, commonParts);
+                }
             });
 
             const note = document.createElement('p');
             note.className = 'disclaimer';
-            note.innerHTML = `Want to check real stock for your exact ${carModel}? <a href="https://www.google.com/search?q=${encodeURIComponent(carModel + ' parts near me')}" target="_blank" rel="noopener">Search online</a>.`;
+            const noteExtra = isFirebaseConfigured ? '' : ' Community stock reporting needs a one-time setup step and isn\'t active yet.';
+            note.innerHTML = `Want to check real stock for your exact ${escapeHtml(carModel)}? <a href="https://www.google.com/search?q=${encodeURIComponent(carModel + ' parts near me')}" target="_blank" rel="noopener">Search online</a>.${noteExtra}`;
             shopsList.appendChild(note);
 
             resultsDiv.classList.add('show');
