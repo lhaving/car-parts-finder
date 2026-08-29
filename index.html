@@ -332,7 +332,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
     <script>
         // Replace with your own project's config from the Firebase console.
-        // Firebase web config values are meant to be public - real security comes from Firestore rules, not from hiding this.
+        // This key is intentionally public - Firebase web config values are designed to be embedded
+        // in client-side code (GitHub's secret scanner flags it, but this is a documented false positive).
+        // Real security comes from two other layers, not from hiding this string:
+        //   1. Google Cloud Console: this key is restricted to this site's domain and to the Firebase APIs it needs
+        //   2. Firestore security rules: reports are append-only and validated server-side (see rules in the repo notes)
         const firebaseConfig = {
             apiKey: "AIzaSyAklUhrYxZqVXTfHxVGb_mqenyO45MRIuE",
             authDomain: "car-parts-finder-6572d.firebaseapp.com",
